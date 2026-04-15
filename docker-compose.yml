@@ -12,6 +12,20 @@ services:
       API_KEY: ${API_KEY:-dev-api-key}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
+      WHISPER_MODEL_NAME: ${WHISPER_MODEL_NAME:-small}
+      WHISPER_MODELS_DIR: ${WHISPER_MODELS_DIR:-.models/whisper}
+      WHISPER_AUTO_DOWNLOAD: ${WHISPER_AUTO_DOWNLOAD:-true}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      PIPER_MODEL_NAME: ${PIPER_MODEL_NAME:-ru_RU-irina-medium}
+      PIPER_MODELS_DIR: ${PIPER_MODELS_DIR:-.models/piper}
+      PIPER_AUTO_DOWNLOAD: ${PIPER_AUTO_DOWNLOAD:-true}
+      PIPER_USE_CUDA: ${PIPER_USE_CUDA:-false}
+      PIPER_SPEAKER_ID: ${PIPER_SPEAKER_ID:-0}
+      ENABLE_REAL_STT: ${ENABLE_REAL_STT:-false}
+      ENABLE_REAL_TTS: ${ENABLE_REAL_TTS:-false}
+      ENABLE_REAL_WEB_SEARCH: ${ENABLE_REAL_WEB_SEARCH:-true}
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
     ports:
       - "8000:8000"

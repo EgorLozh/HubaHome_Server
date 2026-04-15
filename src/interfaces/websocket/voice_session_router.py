@@ -2,7 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.bootstrap.container import AppContainer
 from src.interfaces.websocket.handshake import is_authorized, resolve_api_key
-from src.interfaces.websocket.message_dispatcher import handle_event, parse_event
+from src.interfaces.websocket.message_dispatcher import VoiceSessionState, handle_event, parse_event
 from src.shared.logging.correlation import set_correlation_id
 from src.shared.observability.metrics import ERROR_COUNT
 
@@ -19,12 +19,13 @@ def build_ws_router(container: AppContainer) -> APIRouter:
 
         await websocket.accept()
         set_correlation_id(websocket.headers.get("x-correlation-id"))
+        session = VoiceSessionState()
 
         try:
             while True:
                 payload = await websocket.receive_json()
                 event = parse_event(payload)
-                responses = handle_event(event)
+                responses = await handle_event(event=event, session=session, container=container)
                 for response in responses:
                     await websocket.send_json(response)
         except WebSocketDisconnect:

@@ -24,6 +24,11 @@ ERROR_COUNT = Counter(
     "Total errors by source",
     ["source"],
 )
+STAGE_LATENCY = Histogram(
+    "hubahome_stage_latency_seconds",
+    "Pipeline stage latency in seconds",
+    ["stage"],
+)
 
 
 class HttpMetricsMiddleware(BaseHTTPMiddleware):
@@ -51,3 +56,8 @@ class HttpMetricsMiddleware(BaseHTTPMiddleware):
 
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+def observe_stage_latency(stage: str, started: float) -> None:
+    elapsed = perf_counter() - started
+    STAGE_LATENCY.labels(stage=stage).observe(elapsed)

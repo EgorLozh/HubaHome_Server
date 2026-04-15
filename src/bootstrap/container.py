@@ -1,32 +1,28 @@
 from dataclasses import dataclass
 
-from src.contexts.agent.infrastructure.adapters.ollama.ollama_llm_adapter import (
-    OllamaLlmAdapter,
+from src.contexts.agent.application.ports.llm_provider_port import LLMProviderPort
+from src.contexts.conversation.application.use_cases.orchestrate_turn import (
+    OrchestrateTurnUseCase,
 )
 from src.contexts.knowledge.infrastructure.adapters.qdrant.qdrant_vector_store_adapter import (
     QdrantVectorStoreAdapter,
 )
-from src.contexts.notification.infrastructure.adapters.stub_notification.stub_notification_adapter import (
-    StubNotificationAdapter,
-)
-from src.contexts.speech.infrastructure.adapters.stub_stt.stub_speech_to_text_adapter import (
-    StubSpeechToTextAdapter,
-)
-from src.contexts.speech.infrastructure.adapters.stub_tts.stub_text_to_speech_adapter import (
-    StubTextToSpeechAdapter,
-)
-from src.contexts.webintel.infrastructure.adapters.stub_web_search.stub_web_search_adapter import (
-    StubWebSearchAdapter,
-)
+from src.contexts.notification.application.ports.notification_port import NotificationPort
+from src.contexts.speech.application.ports.speech_to_text_port import SpeechToTextPort
+from src.contexts.speech.application.ports.text_to_speech_port import TextToSpeechPort
+from src.contexts.webintel.application.ports.web_search_port import WebSearchPort
 from src.shared.config.settings import Settings
 
 
 @dataclass
 class AppContainer:
     settings: Settings
-    llm_adapter: OllamaLlmAdapter
+    llm_adapter: LLMProviderPort
     vector_store_adapter: QdrantVectorStoreAdapter
-    speech_to_text_adapter: StubSpeechToTextAdapter
-    text_to_speech_adapter: StubTextToSpeechAdapter
-    web_search_adapter: StubWebSearchAdapter
-    notification_adapter: StubNotificationAdapter
+    speech_to_text_adapter: SpeechToTextPort
+    text_to_speech_adapter: TextToSpeechPort
+    web_search_adapter: WebSearchPort
+    notification_adapter: NotificationPort
+    orchestrate_turn_use_case: OrchestrateTurnUseCase
+    whisper_model_status: str = "not_configured"
+    piper_model_status: str = "not_configured"

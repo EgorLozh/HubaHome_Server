@@ -12,6 +12,7 @@ def settings() -> Settings:
         api_key="test-api-key",
         qdrant_url="http://localhost:6333",
         ollama_url="http://localhost:11434",
+        enable_real_web_search=False,
     )
 
 

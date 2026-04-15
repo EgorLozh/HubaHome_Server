@@ -9,4 +9,19 @@ def test_build_container_returns_stubbed_adapters():
     assert container.settings.api_key == "test-api-key"
     assert container.llm_adapter.name == "ollama"
     assert container.vector_store_adapter.name == "qdrant"
+    assert container.speech_to_text_adapter.name == "stub_stt"
+    assert container.text_to_speech_adapter.name == "stub_tts"
+    assert container.web_search_adapter.name == "duckduckgo_web_search"
     assert container.notification_adapter.name == "stub_notification"
+    assert container.orchestrate_turn_use_case is not None
+
+
+def test_build_container_can_enable_real_whisper_adapter():
+    settings = Settings(
+        api_key="test-api-key",
+        enable_real_stt=True,
+        whisper_auto_download=False,
+    )
+    container = build_container(settings)
+    assert container.speech_to_text_adapter.name == "faster_whisper"
+    assert container.whisper_model_status == "pending"

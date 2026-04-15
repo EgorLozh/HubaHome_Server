@@ -26,6 +26,14 @@ Phase 1 skeleton for the `HubaHome_Server` repository.
 
 - You can optionally create `.env` from `.env.example`.
 - `docker-compose.yml` already has safe defaults, so `.env` is not mandatory for local run.
+- Phase 2 speech toggles:
+  - `ENABLE_REAL_STT=true` with local `faster-whisper`.
+  - Whisper defaults to model `small` and auto-download on startup.
+  - Optional overrides: `WHISPER_MODEL_NAME`, `WHISPER_MODELS_DIR`, `WHISPER_AUTO_DOWNLOAD`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`.
+  - `ENABLE_REAL_TTS=true` with Piper Python API (`piper-tts` package).
+  - Model defaults to `ru_RU-irina-medium` and is auto-downloaded on server startup.
+  - Optional overrides: `PIPER_MODEL_NAME`, `PIPER_MODELS_DIR`, `PIPER_AUTO_DOWNLOAD`, `PIPER_USE_CUDA`.
+  - `ENABLE_REAL_WEB_SEARCH=true` to use DuckDuckGo web search adapter.
 
 ## Local run without Docker
 

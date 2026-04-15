@@ -39,7 +39,7 @@ class PartialTranscriptEvent(WsBaseEvent):
 
 class FinalTranscriptEvent(WsBaseEvent):
     event: Literal["final_transcript"]
-    text: str
+    text: str = ""
 
 
 class AssistantTextEvent(WsBaseEvent):
