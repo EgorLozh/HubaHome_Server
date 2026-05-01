@@ -8,3 +8,4 @@ build/
 dist/
 *.egg-info/
 server_venv/
+.data/

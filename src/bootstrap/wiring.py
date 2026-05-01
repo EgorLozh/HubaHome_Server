@@ -5,6 +5,9 @@ from src.contexts.agent.infrastructure.adapters.ollama.ollama_llm_adapter import
 from src.contexts.conversation.application.use_cases.orchestrate_turn import (
     OrchestrateTurnUseCase,
 )
+from src.contexts.knowledge.infrastructure.adapters.json_metadata.json_metadata_store import (
+    JsonKnowledgeMetadataStore,
+)
 from src.contexts.knowledge.infrastructure.adapters.qdrant.qdrant_vector_store_adapter import (
     QdrantVectorStoreAdapter,
 )
@@ -71,15 +74,24 @@ def build_container(settings: Settings) -> AppContainer:
         else StubTextToSpeechAdapter()
     )
 
+    vector_store_adapter = QdrantVectorStoreAdapter(base_url=settings.qdrant_url)
+    metadata_store = JsonKnowledgeMetadataStore(file_path=settings.knowledge_metadata_path)
     orchestrate_turn_use_case = OrchestrateTurnUseCase(
         llm_provider=llm_adapter,
         web_search=web_search_adapter,
+        vector_store=vector_store_adapter,
+        notification=StubNotificationAdapter(),
+        knowledge_collection=settings.knowledge_collection_name,
+        metadata_store=metadata_store,
+        max_tool_calls_per_turn=settings.agent_max_tool_calls_per_turn,
+        max_steps_per_turn=settings.agent_max_steps_per_turn,
+        turn_timeout_ms=settings.agent_turn_timeout_ms,
     )
 
     return AppContainer(
         settings=settings,
         llm_adapter=llm_adapter,
-        vector_store_adapter=QdrantVectorStoreAdapter(base_url=settings.qdrant_url),
+        vector_store_adapter=vector_store_adapter,
         speech_to_text_adapter=speech_to_text_adapter,
         text_to_speech_adapter=text_to_speech_adapter,
         web_search_adapter=web_search_adapter,

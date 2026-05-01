@@ -3,7 +3,11 @@ from src.shared.config.settings import Settings
 
 
 def test_build_container_returns_stubbed_adapters():
-    settings = Settings(api_key="test-api-key")
+    settings = Settings(
+        api_key="test-api-key",
+        enable_real_stt=False,
+        enable_real_tts=False,
+    )
     container = build_container(settings)
 
     assert container.settings.api_key == "test-api-key"

@@ -33,6 +33,12 @@ class Settings(BaseSettings):
 
     metrics_enabled: bool = True
 
+    agent_max_steps_per_turn: int = 4
+    agent_max_tool_calls_per_turn: int = 3
+    agent_turn_timeout_ms: int = 8000
+    knowledge_collection_name: str = "knowledge_notes"
+    knowledge_metadata_path: str = ".data/knowledge/metadata.json"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,

@@ -31,6 +31,11 @@ def build_config_router(container: AppContainer) -> APIRouter:
             "piperModelsDir": settings.piper_models_dir,
             "piperAutoDownload": settings.piper_auto_download,
             "piperUseCuda": settings.piper_use_cuda,
+            "agentMaxStepsPerTurn": settings.agent_max_steps_per_turn,
+            "agentMaxToolCallsPerTurn": settings.agent_max_tool_calls_per_turn,
+            "agentTurnTimeoutMs": settings.agent_turn_timeout_ms,
+            "knowledgeCollectionName": settings.knowledge_collection_name,
+            "knowledgeMetadataPath": settings.knowledge_metadata_path,
         }
 
     return router

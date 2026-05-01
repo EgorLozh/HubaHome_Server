@@ -6,13 +6,16 @@ from src.shared.config.settings import Settings
 
 
 @pytest.fixture()
-def settings() -> Settings:
+def settings(tmp_path) -> Settings:
     return Settings(
         app_env="test",
         api_key="test-api-key",
         qdrant_url="http://localhost:6333",
         ollama_url="http://localhost:11434",
+        enable_real_stt=False,
+        enable_real_tts=False,
         enable_real_web_search=False,
+        knowledge_metadata_path=str(tmp_path / "metadata.json"),
     )
 
 

@@ -39,3 +39,24 @@ def test_ws_rejects_final_transcript_without_wakeword(client):
         payload = websocket.receive_json()
         assert payload["event"] == "error"
         assert "Wakeword" in payload["message"]
+
+
+def test_ws_metadata_and_document_commands_return_assistant_text(client):
+    with client.websocket_connect("/v1/voice/session?api_key=test-api-key") as websocket:
+        websocket.send_json({"event": "wakeword_detected"})
+        assert websocket.receive_json()["event"] == "assistant_text"
+
+        websocket.send_json({"event": "final_transcript", "text": "меня зовут Егор"})
+        set_name_payload = websocket.receive_json()
+        assert set_name_payload["event"] == "assistant_text"
+        assert set_name_payload["text"]
+
+        websocket.send_json({"event": "final_transcript", "text": "запомни документ про молоко"})
+        save_payload = websocket.receive_json()
+        assert save_payload["event"] == "assistant_text"
+        assert save_payload["text"]
+
+        websocket.send_json({"event": "final_transcript", "text": "что ты знаешь про молоко"})
+        search_payload = websocket.receive_json()
+        assert search_payload["event"] == "assistant_text"
+        assert search_payload["text"]
