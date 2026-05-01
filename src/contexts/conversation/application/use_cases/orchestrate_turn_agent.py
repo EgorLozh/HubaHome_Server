@@ -32,6 +32,16 @@ class WeatherToolInput(BaseModel):
     )
 
 
+class WebSearchToolInput(BaseModel):
+    query: str = Field(
+        ...,
+        description=(
+            "Запрос для поиска в интернете. Используй для актуальных фактов, новостей, "
+            "определений и данных, которых нет в памяти пользователя."
+        ),
+    )
+
+
 class CreateDocumentToolInput(BaseModel):
     title: str = Field(..., description="Заголовок заметки для сохранения в памяти пользователя.")
     text: str = Field(..., description="Основной текст заметки для сохранения.")
@@ -170,10 +180,11 @@ class OrchestrateTurnUseCase:
             model=self.llm_provider.get_chat_model(),
             tools=self._tools,
             system_prompt=(
-                "Ты домашний ассистент, тебя зовут Хуба. Предствь что ты хулиган и задира, отвечай грубо и нахально по-русски. "
+                "Ты домашний ассистент, тебя зовут Хуба. Отвечай информативно по-русски. "
                 "Используй инструменты только по необходимости. "
                 "Выбор инструментов: "
                 "weather_tool для фактов о погоде, "
+                "internet_search_tool для общего поиска в интернете по актуальным данным, "
                 "create_document_tool/update_document_tool/delete_document_tool/search_documents_tool для работы с заметками пользователя (Информация, заметки, задачи, списки, etc.), "
                 "set_instruction_tool/get_instruction_tool/get_instructions_tool/delete_instruction_tool для постоянных предпочтений пользователя (Правила, инструкции, предпочтения). "
                 "Если у пользователя обычный вопрос без внешних данных или изменений памяти, не вызывай инструменты. "
@@ -192,6 +203,15 @@ class OrchestrateTurnUseCase:
                     "Вход: строка с локацией/контекстом. Выход: короткие фактические фрагменты о погоде."
                 ),
                 args_schema=WeatherToolInput,
+            ),
+            StructuredTool.from_function(
+                coroutine=self._run_internet_search_tool,
+                name="internet_search_tool",
+                description=(
+                    "Ищет актуальную информацию в интернете. "
+                    "Используй для фактов и новостей вне памяти пользователя, когда вопрос не про погоду."
+                ),
+                args_schema=WebSearchToolInput,
             ),
             StructuredTool.from_function(
                 coroutine=self._create_document_tool,
@@ -269,6 +289,29 @@ class OrchestrateTurnUseCase:
         if not snippets:
             return "Не удалось найти релевантные данные о погоде."
         return "; ".join(snippets)
+
+    async def _run_internet_search_tool(self, query: str) -> str:
+        normalized = query.strip()
+        if not normalized:
+            return "Нужен запрос для поиска в интернете."
+
+        search_results = await self.web_search.search(normalized)
+        lines: list[str] = []
+        for item in search_results[:3]:
+            if not isinstance(item, dict):
+                continue
+            snippet = str(item.get("snippet", "")).strip()
+            if not snippet:
+                continue
+            source = str(item.get("source", "")).strip()
+            if source:
+                lines.append(f"{snippet} (источник: {source})")
+            else:
+                lines.append(snippet)
+
+        if not lines:
+            return "Не удалось получить релевантные данные из интернета."
+        return " ; ".join(lines)
 
     async def _create_document_tool(self, title: str, text: str, tags: list[str]) -> str:
         normalized_text = text.strip()
@@ -410,26 +453,26 @@ class OrchestrateTurnUseCase:
 
     @staticmethod
     def _extract_assistant_text(messages: list[Any]) -> str:
+        fallback_ai_text = ""
+        fallback_tool_text = ""
         for message in reversed(messages):
             role = getattr(message, "type", "")
+            content_text = OrchestrateTurnUseCase._extract_text_from_content(getattr(message, "content", ""))
+            if role in {"tool"} and content_text and not fallback_tool_text:
+                fallback_tool_text = content_text
             if role not in {"ai", "assistant"}:
                 continue
+            if content_text and not fallback_ai_text:
+                fallback_ai_text = content_text
             tool_calls = getattr(message, "tool_calls", None)
-            if isinstance(tool_calls, list) and tool_calls:
+            if isinstance(tool_calls, list) and tool_calls and not content_text:
                 continue
-            content = getattr(message, "content", "")
-            if isinstance(content, str) and content.strip():
-                return content.strip()
-            if isinstance(content, list):
-                text_parts = []
-                for block in content:
-                    if isinstance(block, dict):
-                        text_value = block.get("text")
-                        if isinstance(text_value, str):
-                            text_parts.append(text_value)
-                merged = " ".join(part for part in text_parts if part).strip()
-                if merged:
-                    return merged
+            if content_text:
+                return content_text
+        if fallback_ai_text:
+            return fallback_ai_text
+        if fallback_tool_text:
+            return f"Вот что удалось найти: {fallback_tool_text}"
         return "Не удалось подготовить ответ."
 
     @staticmethod
@@ -439,11 +482,44 @@ class OrchestrateTurnUseCase:
         first_tool = tool_names[0]
         if first_tool == "weather_tool":
             return "weather"
+        if first_tool == "internet_search_tool":
+            return "web"
         if "document" in first_tool:
             return "knowledge"
         if "instruction" in first_tool:
             return "metadata"
         return "chat"
+
+    @staticmethod
+    def _extract_text_from_content(content: Any) -> str:
+        if isinstance(content, str):
+            return content.strip()
+
+        if isinstance(content, dict):
+            dict_text = OrchestrateTurnUseCase._extract_text_from_dict(content)
+            return dict_text.strip()
+
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for block in content:
+                if isinstance(block, str):
+                    text_parts.append(block.strip())
+                    continue
+                if isinstance(block, dict):
+                    text_value = OrchestrateTurnUseCase._extract_text_from_dict(block)
+                    if text_value:
+                        text_parts.append(text_value.strip())
+            return " ".join(part for part in text_parts if part).strip()
+
+        return ""
+
+    @staticmethod
+    def _extract_text_from_dict(block: dict[str, Any]) -> str:
+        for key in ("text", "content", "value"):
+            value = block.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        return ""
 
     @staticmethod
     def _embed_text(text: str, dims: int = 24) -> list[float]:

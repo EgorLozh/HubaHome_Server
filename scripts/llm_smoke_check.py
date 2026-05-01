@@ -30,6 +30,20 @@ async def run(full: bool) -> int:
         return 1
     print(f"[ok] direct answer: {direct_answer.strip()}")
 
+    print("[info] checking web search provider...")
+    web_results = await container.web_search_adapter.search("current weather izhevsk")
+    if not isinstance(web_results, list):
+        print("[fail] web search adapter returned invalid result type")
+        return 1
+    if not web_results:
+        print("[fail] web search adapter returned empty result list")
+        return 1
+    first_snippet = str(web_results[0].get("snippet", "")).strip() if isinstance(web_results[0], dict) else ""
+    if "недоступен" in first_snippet.lower() or "таймаут" in first_snippet.lower():
+        print(f"[warn] web search provider degraded: {first_snippet}")
+    else:
+        print("[ok] web search provider returned data")
+
     if not full:
         print("[ok] basic LLM smoke checks passed")
         return 0

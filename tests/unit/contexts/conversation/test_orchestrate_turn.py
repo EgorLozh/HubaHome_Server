@@ -54,7 +54,7 @@ class FakeVectorStore:
 @dataclass
 class FakeMessage:
     type: str
-    content: str
+    content: Any
     tool_calls: list[dict] | None = None
 
 
@@ -124,6 +124,37 @@ def test_orchestrate_turn_chat_without_tools():
 
     assert result.intent == "chat"
     assert result.assistant_text == "Привет!"
+
+
+def test_orchestrate_turn_web_search_intent():
+    use_case = _build_use_case(
+        lambda _: {
+            "messages": [
+                FakeMessage(type="ai", content="", tool_calls=[{"name": "internet_search_tool"}]),
+                FakeMessage(type="ai", content="Нашел актуальные новости в интернете.", tool_calls=[]),
+            ],
+        }
+    )
+    result = asyncio.run(use_case.execute("что нового в мире технологий"))
+
+    assert result.intent == "web"
+    assert "новости" in result.assistant_text
+
+
+def test_orchestrate_turn_weather_uses_tool_fallback_when_final_ai_text_missing():
+    use_case = _build_use_case(
+        lambda _: {
+            "messages": [
+                FakeMessage(type="ai", content="", tool_calls=[{"name": "weather_tool"}]),
+                FakeMessage(type="tool", content="В Ижевске около +12, облачно."),
+            ],
+        }
+    )
+    result = asyncio.run(use_case.execute("какая сейчас погода в ижевске"))
+
+    assert result.intent == "weather"
+    assert "Ижевске" in result.assistant_text
+    assert result.assistant_text != "Не удалось подготовить ответ."
 
 
 def test_orchestrate_turn_applies_metadata_instruction_to_prompt():
