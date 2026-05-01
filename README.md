@@ -8,7 +8,7 @@ MVP server runtime for the `HubaHome_Server` repository.
 - Python 3.12
 - Pydantic Settings
 - Prometheus metrics
-- LangChain + LangGraph
+- LangChain Tool Calling Agent
 - Docker Compose (`server + qdrant`)
 
 ## Quick start
@@ -25,7 +25,7 @@ MVP server runtime for the `HubaHome_Server` repository.
    - `python scripts/llm_smoke_check.py` (basic LLM path)
    - `python scripts/llm_smoke_check.py --full` (LLM + orchestrator + metadata flows)
    - `python scripts/tools_smoke_check.py` (basic metadata tool check)
-   - `python scripts/tools_smoke_check.py --full` (metadata + knowledge CRUD + weather tool)
+- `python scripts/tools_smoke_check.py --full` (metadata + knowledge CRUD + weather flow)
 4. Interactive terminal chat with agent (transcript simulation):
    - `python scripts/agent_terminal_chat.py`
    - `python scripts/agent_terminal_chat.py --scenario basic`
@@ -54,9 +54,9 @@ MVP server runtime for the `HubaHome_Server` repository.
 ## MVP capabilities
 
 - Weather retrieval via `weather_tool`.
-- Knowledge document lifecycle via `knowledge_document_tool`:
+- Knowledge document lifecycle via tool-calling flow:
   - create/update/delete/search documents.
-- Persistent metadata instructions via `metadata_instruction_tool`:
+- Persistent metadata instructions via tool-calling flow:
   - store and apply user preferences in prompt context (for example user name).
 
 ## Not supported in MVP

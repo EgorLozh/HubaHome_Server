@@ -34,6 +34,8 @@ services:
       KNOWLEDGE_METADATA_PATH: ${KNOWLEDGE_METADATA_PATH:-.data/knowledge/metadata.json}
     ports:
       - "8000:8000"
+    volumes:
+      - ./.data:/app/.data
     depends_on:
       - qdrant
     healthcheck:

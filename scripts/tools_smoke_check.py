@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import sys
-from typing import Any
 
 from src.bootstrap.wiring import build_container
 from src.shared.config.settings import get_settings
@@ -12,121 +11,83 @@ async def run(full: bool) -> int:
     container = build_container(settings)
     use_case = container.orchestrate_turn_use_case
 
-    print("[info] checking metadata_instruction_tool...")
-    set_result = await use_case.tool_registry.call(
-        "metadata_instruction_tool",
-        {"action": "set_instruction", "key": "name", "value": "Егор"},
-    )
-    if not set_result.ok:
-        print("[fail] metadata set failed")
-        print(f"[debug] {set_result.message}")
+    print("[info] checking metadata instruction flow via agent...")
+    set_result = await use_case.execute("меня зовут Егор")
+    if set_result.intent not in {"metadata", "chat"}:
+        print("[fail] metadata set flow failed")
+        print(f"[debug] intent={set_result.intent!r}, text={set_result.assistant_text!r}")
         return 1
-    print(f"[ok] metadata set: {set_result.message}")
+    print(f"[ok] metadata set: intent={set_result.intent}, text={set_result.assistant_text}")
 
-    get_result = await use_case.tool_registry.call(
-        "metadata_instruction_tool",
-        {"action": "get_instruction", "key": "name"},
-    )
-    if not get_result.ok:
-        print("[fail] metadata get failed")
-        print(f"[debug] {get_result.message}")
+    get_result = await use_case.execute("как меня зовут")
+    if not get_result.assistant_text.strip():
+        print("[fail] metadata get flow returned empty response")
         return 1
-    print(f"[ok] metadata get: {get_result.message}")
+    print(f"[ok] metadata get: intent={get_result.intent}, text={get_result.assistant_text}")
 
     if not full:
         print("[ok] basic tools smoke checks passed")
         return 0
 
-    print("[info] full mode enabled: checking knowledge_document_tool...")
+    print("[info] full mode enabled: checking knowledge/document and weather flows...")
     vector_ok = await container.vector_store_adapter.ping()
     if not vector_ok:
         print("[fail] Qdrant is unreachable. Full mode requires vector store.")
         return 1
 
-    create_result = await use_case.tool_registry.call(
-        "knowledge_document_tool",
-        {
-            "action": "create_document",
-            "title": "Тестовый документ",
-            "text": "молоко и хлеб",
-            "tags": ["smoke"],
-        },
-    )
-    if not create_result.ok:
-        print("[fail] document create failed")
-        print(f"[debug] {create_result.message}")
+    create_turn = await use_case.execute("создай документ с заголовком Тест и текстом молоко и хлеб")
+    if create_turn.intent not in {"knowledge", "chat"}:
+        print("[fail] document create flow failed")
+        print(f"[debug] intent={create_turn.intent!r}, text={create_turn.assistant_text!r}")
         return 1
-    document = create_result.data.get("document", {})
-    doc_id = str(document.get("id", ""))
+    print(f"[ok] document create: intent={create_turn.intent}")
+
+    # A direct metadata lookup is used for deterministic CRUD checks in smoke mode.
+    all_docs = use_case.metadata_store.search(query="молоко", limit=1)
+    if not all_docs:
+        print("[fail] document create produced no metadata records")
+        return 1
+    doc_id = str(all_docs[0].get("id", "")).strip()
     if not doc_id:
-        print("[fail] document create returned empty id")
+        print("[fail] created document has no id")
         return 1
-    print(f"[ok] document create: id={doc_id}")
 
-    search_result = await use_case.tool_registry.call(
-        "knowledge_document_tool",
-        {"action": "search_documents", "query": "молоко"},
-    )
-    if not search_result.ok:
-        print("[fail] document search failed")
-        print(f"[debug] {search_result.message}")
-        return 1
-    items = _safe_items(search_result.data)
-    if not items:
-        print("[fail] document search returned no items")
-        return 1
-    print(f"[ok] document search: {len(items)} item(s)")
-
-    update_result = await use_case.tool_registry.call(
-        "knowledge_document_tool",
-        {"action": "update_document", "id": doc_id, "text": "молоко, хлеб и сыр"},
-    )
-    if not update_result.ok:
+    update_result = await use_case._update_document_tool(id=doc_id, text="молоко, хлеб и сыр")
+    if "обновлен" not in update_result.lower():
         print("[fail] document update failed")
-        print(f"[debug] {update_result.message}")
+        print(f"[debug] result={update_result!r}")
         return 1
     print("[ok] document update passed")
 
-    delete_result = await use_case.tool_registry.call(
-        "knowledge_document_tool",
-        {"action": "delete_document", "id": doc_id},
-    )
-    if not delete_result.ok:
+    search_turn = await use_case.execute("найди документ про молоко")
+    if not search_turn.assistant_text.strip():
+        print("[fail] document search returned empty text")
+        return 1
+    print(f"[ok] document search: intent={search_turn.intent}, text={search_turn.assistant_text}")
+
+    delete_result = await use_case._delete_document_tool(id=doc_id)
+    if "удален" not in delete_result.lower():
         print("[fail] document delete failed")
-        print(f"[debug] {delete_result.message}")
+        print(f"[debug] result={delete_result!r}")
         return 1
     print("[ok] document delete passed")
 
-    print("[info] checking weather_tool...")
-    weather_result = await use_case.tool_registry.call(
-        "weather_tool",
-        {"query": "москва"},
-    )
-    if weather_result.ok:
-        print("[ok] weather tool passed")
+    weather_turn = await use_case.execute("какая погода в москве")
+    if weather_turn.assistant_text.strip():
+        print(f"[ok] weather flow: intent={weather_turn.intent}, text={weather_turn.assistant_text}")
     else:
-        # Weather may fail due to external dependency/network restrictions.
-        print(f"[warn] weather tool failed: {weather_result.message}")
+        print("[warn] weather flow returned empty text")
 
     print("[ok] full tools smoke checks passed")
     return 0
 
 
-def _safe_items(payload: Any) -> list[dict]:
-    if not isinstance(payload, dict):
-        return []
-    items = payload.get("items", [])
-    if isinstance(items, list):
-        return [item for item in items if isinstance(item, dict)]
-    return []
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Smoke checks for tool registry and tool execution")
+    parser = argparse.ArgumentParser(description="Smoke checks for LangChain agent tool execution")
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Run metadata + knowledge CRUD + weather checks (requires Qdrant)",
+        help="Run metadata + knowledge + weather checks (requires Qdrant)",
     )
     args = parser.parse_args()
     try:

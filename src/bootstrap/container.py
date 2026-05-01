@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from src.contexts.agent.application.ports.llm_provider_port import LLMProviderPort
-from src.contexts.conversation.application.use_cases.orchestrate_turn import (
+from src.contexts.conversation.application.use_cases.orchestrate_turn_agent import (
     OrchestrateTurnUseCase,
 )
 from src.contexts.knowledge.application.ports.vector_store_port import VectorStorePort

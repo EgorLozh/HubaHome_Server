@@ -1,42 +1,21 @@
 import asyncio
+import re
 import tempfile
+from dataclasses import dataclass
 from typing import Any
 
-from src.contexts.conversation.application.use_cases.orchestrate_turn import OrchestrateTurnUseCase
+from src.contexts.conversation.application.use_cases.orchestrate_turn_agent import OrchestrateTurnUseCase
 from src.contexts.knowledge.infrastructure.adapters.json_metadata.json_metadata_store import (
     JsonKnowledgeMetadataStore,
 )
 
 
 class FakeLlm:
+    def get_chat_model(self):
+        raise RuntimeError("not used in tests")
+
     async def generate_text(self, prompt: str) -> str:
-        if '"tools"' in prompt:
-            if "погода" in prompt.lower():
-                return '{"tools":[{"name":"weather_tool","input":{"query":"москва"}}]}'
-            if "запомни" in prompt.lower():
-                return (
-                    '{"tools":[{"name":"knowledge_document_tool","input":'
-                    '{"action":"create_document","title":"Заметка","text":"моя заметка"}}]}'
-                )
-            if "что ты знаешь" in prompt.lower():
-                return (
-                    '{"tools":[{"name":"knowledge_document_tool","input":'
-                    '{"action":"search_documents","query":"заметка"}}]}'
-                )
-            if "меня зовут" in prompt.lower():
-                return (
-                    '{"tools":[{"name":"metadata_instruction_tool","input":'
-                    '{"action":"set_instruction","key":"name","value":"Егор"}}]}'
-                )
-            if "как меня зовут" in prompt.lower():
-                return (
-                    '{"tools":[{"name":"metadata_instruction_tool","input":'
-                    '{"action":"get_instruction","key":"name"}}]}'
-                )
-            return '{"tools":[]}'
-        if "Обращайся к пользователю по имени: Егор." in prompt:
-            return "Егор, сегодня около +12, облачно."
-        return "Сегодня около +12, облачно."
+        return "ok"
 
     async def ping(self) -> bool:
         return True
@@ -72,30 +51,53 @@ class FakeVectorStore:
         return True
 
 
-class FakeNotification:
-    def __init__(self) -> None:
-        self.sent: list[str] = []
+@dataclass
+class FakeMessage:
+    type: str
+    content: str
+    tool_calls: list[dict] | None = None
 
-    async def send(self, text: str, reminder_id: str | None = None, scheduled_at: str | None = None) -> None:
-        self.sent.append(text)
+
+class FakeExecutor:
+    def __init__(self, response_factory):
+        self._response_factory = response_factory
+
+    async def ainvoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._response_factory(payload)
 
 
-def _build_use_case() -> OrchestrateTurnUseCase:
+class UseCaseForTests(OrchestrateTurnUseCase):
+    def __init__(self, fake_executor: FakeExecutor, **kwargs: Any) -> None:
+        self._fake_executor = fake_executor
+        super().__init__(**kwargs)
+
+    def _build_agent_runner(self):
+        return self._fake_executor
+
+
+def _build_use_case(response_factory) -> UseCaseForTests:
     temp_dir = tempfile.mkdtemp()
     metadata_store = JsonKnowledgeMetadataStore(file_path=f"{temp_dir}/knowledge.json")
-    return OrchestrateTurnUseCase(
+    return UseCaseForTests(
+        fake_executor=FakeExecutor(response_factory=response_factory),
         llm_provider=FakeLlm(),
         web_search=FakeWebSearch(),
         vector_store=FakeVectorStore(),
-        notification=FakeNotification(),
         knowledge_collection="test_notes",
         metadata_store=metadata_store,
         max_tool_calls_per_turn=3,
     )
 
 
-def test_orchestrate_turn_weather_tool():
-    use_case = _build_use_case()
+def test_orchestrate_turn_weather_intent():
+    use_case = _build_use_case(
+        lambda _: {
+            "messages": [
+                FakeMessage(type="ai", content="", tool_calls=[{"name": "weather_tool"}]),
+                FakeMessage(type="ai", content="Сегодня около +12, облачно.", tool_calls=[]),
+            ],
+        }
+    )
     result = asyncio.run(use_case.execute("какая погода в москве"))
 
     assert result.intent == "weather"
@@ -103,89 +105,107 @@ def test_orchestrate_turn_weather_tool():
 
 
 def test_orchestrate_turn_reminder_intent_is_out_of_scope():
-    use_case = _build_use_case()
+    use_case = _build_use_case(lambda _: {"messages": []})
     result = asyncio.run(use_case.execute("поставь напоминание на 9 утра"))
 
     assert result.intent == "unsupported_capability"
     assert "напоминаниями" in result.assistant_text
 
 
-def test_orchestrate_turn_knowledge_save_and_retrieve():
-    use_case = _build_use_case()
-    saved = asyncio.run(use_case.execute("запомни моя заметка"))
-    found = asyncio.run(use_case.execute("что ты знаешь про заметка"))
+def test_orchestrate_turn_chat_without_tools():
+    use_case = _build_use_case(
+        lambda _: {
+            "messages": [
+                FakeMessage(type="ai", content="Привет!", tool_calls=[]),
+            ],
+        }
+    )
+    result = asyncio.run(use_case.execute("привет"))
 
-    assert saved.intent == "knowledge"
-    assert found.intent == "knowledge"
+    assert result.intent == "chat"
+    assert result.assistant_text == "Привет!"
 
 
 def test_orchestrate_turn_applies_metadata_instruction_to_prompt():
-    use_case = _build_use_case()
-    set_name = asyncio.run(use_case.execute("меня зовут Егор"))
+    def response_factory(payload: dict[str, Any]) -> dict[str, Any]:
+        messages = payload.get("messages", [])
+        first_content = ""
+        if isinstance(messages, list) and messages:
+            first = messages[0]
+            if isinstance(first, dict):
+                first_content = str(first.get("content", ""))
+        context = first_content
+        if "Обращайся к пользователю по имени: Егор." in context:
+            return {"messages": [FakeMessage(type="ai", content="Егор, рад помочь.", tool_calls=[])]}
+        return {"messages": [FakeMessage(type="ai", content="Рад помочь.", tool_calls=[])]}
+
+    use_case = _build_use_case(response_factory)
+    asyncio.run(use_case._set_instruction_tool(key="name", value="Егор"))
     response = asyncio.run(use_case.execute("привет"))
 
-    assert set_name.intent == "metadata"
     assert response.intent == "chat"
     assert "Егор" in response.assistant_text
 
 
 def test_knowledge_document_update_and_delete_via_tools():
-    use_case = _build_use_case()
+    use_case = _build_use_case(lambda _: {"messages": [FakeMessage(type="ai", content="ok", tool_calls=[])]})
     created = asyncio.run(
-        use_case.tool_registry.call(
-            "knowledge_document_tool",
-            {"action": "create_document", "title": "T1", "text": "старый текст"},
+        use_case._create_document_tool(
+            title="T1",
+            text="старый текст",
+            tags=[],
         )
     )
-    document = created.data["document"]
-    item_id = str(document["id"])
+    match = re.search(r"id=([a-f0-9-]+)", created)
+    assert match is not None
+    item_id = match.group(1)
 
     updated = asyncio.run(
-        use_case.tool_registry.call(
-            "knowledge_document_tool",
-            {"action": "update_document", "id": item_id, "text": "новый текст"},
+        use_case._update_document_tool(
+            id=item_id,
+            text="новый текст",
         )
     )
     searched = asyncio.run(
-        use_case.tool_registry.call(
-            "knowledge_document_tool",
-            {"action": "search_documents", "query": "новый"},
+        use_case._search_documents_tool(
+            query="новый",
         )
     )
     deleted = asyncio.run(
-        use_case.tool_registry.call(
-            "knowledge_document_tool",
-            {"action": "delete_document", "id": item_id},
+        use_case._delete_document_tool(
+            id=item_id,
         )
     )
 
-    assert created.ok is True
-    assert updated.ok is True
-    assert searched.ok is True
-    assert "новый текст" in searched.message
-    assert deleted.ok is True
+    assert "сохранен" in created
+    assert updated == "Документ обновлен."
+    assert "новый текст" in searched
+    assert deleted == "Документ удален."
 
 
 def test_knowledge_document_update_rolls_back_on_vector_failure():
-    use_case = _build_use_case()
+    use_case = _build_use_case(lambda _: {"messages": [FakeMessage(type="ai", content="ok", tool_calls=[])]})
     vector_store: Any = use_case.vector_store
     created = asyncio.run(
-        use_case.tool_registry.call(
-            "knowledge_document_tool",
-            {"action": "create_document", "title": "T2", "text": "до сбоя"},
+        use_case._create_document_tool(
+            title="T2",
+            text="до сбоя",
+            tags=[],
         )
     )
-    item_id = str(created.data["document"]["id"])
-    # Simulate vector layer failure during update; metadata should rollback.
+    match = re.search(r"id=([a-f0-9-]+)", created)
+    assert match is not None
+    item_id = match.group(1)
+
     vector_store.raise_on_upsert = True
     failed_update = asyncio.run(
-        use_case.tool_registry.call(
-            "knowledge_document_tool",
-            {"action": "update_document", "id": item_id, "text": "после сбоя"},
+        use_case._update_document_tool(
+            id=item_id,
+            text="после сбоя",
         )
     )
     stored_document = use_case.metadata_store.get_document(item_id)
 
-    assert failed_update.ok is False
+    assert failed_update == "Не удалось обновить документ в векторной базе."
     assert stored_document is not None
     assert stored_document.get("text") == "до сбоя"

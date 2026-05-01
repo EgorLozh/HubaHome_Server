@@ -1,4 +1,5 @@
 import httpx
+from langchain_core.language_models import BaseChatModel
 try:
     from langchain_ollama import ChatOllama
 except Exception:  # pragma: no cover - optional runtime fallback
@@ -13,18 +14,34 @@ class OllamaLlmAdapter(LLMProviderPort):
     def __init__(self, base_url: str, model: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
-        self._chat = ChatOllama(model=model, base_url=self.base_url, temperature=0) if ChatOllama else None
+        self._chat = (
+            ChatOllama(
+                model=model,
+                base_url=self.base_url,
+                temperature=0,
+                reasoning=False,
+                # Prevent proxy env vars from hijacking local/LAN Ollama calls.
+                async_client_kwargs={"trust_env": False},
+                sync_client_kwargs={"trust_env": False},
+            )
+            if ChatOllama
+            else None
+        )
+
+    def get_chat_model(self) -> BaseChatModel:
+        if self._chat is None:
+            raise RuntimeError("Chat model is unavailable: install langchain-ollama and configure Ollama.")
+        return self._chat
 
     async def generate_text(self, prompt: str) -> str:
         text = ""
         try:
-            if self._chat is not None:
-                response = await self._chat.ainvoke(prompt)
-                content = response.content
-                if isinstance(content, str):
-                    text = content.strip()
-                else:
-                    text = str(content).strip()
+            response = await self.get_chat_model().ainvoke(prompt)
+            content = response.content
+            if isinstance(content, str):
+                text = content.strip()
+            else:
+                text = str(content).strip()
             if text:
                 return text
         except Exception:

@@ -2,7 +2,7 @@ from src.bootstrap.container import AppContainer
 from src.contexts.agent.infrastructure.adapters.ollama.ollama_llm_adapter import (
     OllamaLlmAdapter,
 )
-from src.contexts.conversation.application.use_cases.orchestrate_turn import (
+from src.contexts.conversation.application.use_cases.orchestrate_turn_agent import (
     OrchestrateTurnUseCase,
 )
 from src.contexts.knowledge.infrastructure.adapters.json_metadata.json_metadata_store import (
@@ -80,7 +80,6 @@ def build_container(settings: Settings) -> AppContainer:
         llm_provider=llm_adapter,
         web_search=web_search_adapter,
         vector_store=vector_store_adapter,
-        notification=StubNotificationAdapter(),
         knowledge_collection=settings.knowledge_collection_name,
         metadata_store=metadata_store,
         max_tool_calls_per_turn=settings.agent_max_tool_calls_per_turn,
