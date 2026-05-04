@@ -35,7 +35,9 @@ MVP server runtime for the `HubaHome_Server` repository.
 
 - You can optionally create `.env` from `.env.example`.
 - `docker-compose.yml` already has safe defaults, so `.env` is not mandatory for local run.
-- Voice session clients can send a single utterance WAV as one `audio_chunk`, followed by `final_transcript` with empty text to trigger server-side STT.
+- Voice session clients can send a single utterance WAV as one `audio_chunk`, followed by `final_transcript`.
+- If audio is present, the server now prefers server-side STT.
+- `final_transcript.text` is kept as a compatibility fallback for older clients or degraded STT scenarios.
 - Phase 2 speech toggles:
   - `ENABLE_REAL_STT=true` with local `faster-whisper`.
   - Whisper defaults to model `small` and auto-download on startup.
@@ -47,7 +49,9 @@ MVP server runtime for the `HubaHome_Server` repository.
 - Agent runtime settings:
   - `AGENT_MAX_STEPS_PER_TURN` (default `4`)
   - `AGENT_MAX_TOOL_CALLS_PER_TURN` (default `3`)
-  - `AGENT_TURN_TIMEOUT_MS` (default `8000`)
+  - `STT_TIMEOUT_MS` (default `20000`)
+  - `AGENT_TURN_TIMEOUT_MS` (default `20000`)
+  - `TTS_TIMEOUT_MS` (default `20000`)
 - Knowledge settings:
   - `KNOWLEDGE_COLLECTION_NAME` (default `knowledge_notes`)
   - `KNOWLEDGE_METADATA_PATH` (default `.data/knowledge/metadata.json`)

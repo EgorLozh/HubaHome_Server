@@ -33,7 +33,9 @@ def build_config_router(container: AppContainer) -> APIRouter:
             "piperUseCuda": settings.piper_use_cuda,
             "agentMaxStepsPerTurn": settings.agent_max_steps_per_turn,
             "agentMaxToolCallsPerTurn": settings.agent_max_tool_calls_per_turn,
+            "sttTimeoutMs": settings.stt_timeout_ms,
             "agentTurnTimeoutMs": settings.agent_turn_timeout_ms,
+            "ttsTimeoutMs": settings.tts_timeout_ms,
             "knowledgeCollectionName": settings.knowledge_collection_name,
             "knowledgeMetadataPath": settings.knowledge_metadata_path,
         }

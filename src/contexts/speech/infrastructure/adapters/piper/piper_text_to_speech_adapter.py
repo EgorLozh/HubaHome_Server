@@ -40,11 +40,9 @@ class PiperTextToSpeechAdapter(TextToSpeechPort):
             await asyncio.to_thread(self.initialize)
         if self._voice is None:
             raise RuntimeError("Piper voice failed to initialize")
-        return await asyncio.to_thread(self._synthesize_sync, text)
 
-    def _synthesize_sync(self, text: str) -> str:
         synth_config = SynthesisConfig(speaker_id=self.speaker_id)
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as wav_file:
-            self._voice.synthesize_wav(text, wav_file, syn_config=synth_config)
+            await asyncio.to_thread(self._voice.synthesize_wav, text, wav_file, syn_config=synth_config)
         return base64.b64encode(buffer.getvalue()).decode("ascii")

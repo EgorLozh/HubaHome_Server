@@ -6,8 +6,6 @@ from pathlib import Path
 class JsonKnowledgeMetadataStore:
     def __init__(self, file_path: str) -> None:
         self._path = Path(file_path)
-        self._payload_cache: dict[str, dict] | None = None
-        self._payload_cache_mtime_ns: int | None = None
 
     def upsert(self, item_id: str, text: str) -> None:
         payload = self._read_payload()
@@ -128,44 +126,23 @@ class JsonKnowledgeMetadataStore:
 
     def _read_payload(self) -> dict[str, dict]:
         if not self._path.exists():
-            payload = {"instructions": {}, "documents": {}}
-            self._payload_cache = self._clone_payload(payload)
-            self._payload_cache_mtime_ns = None
-            return payload
-        current_mtime_ns = self._path.stat().st_mtime_ns
-        if self._payload_cache is not None and self._payload_cache_mtime_ns == current_mtime_ns:
-            return self._clone_payload(self._payload_cache)
+            return {"instructions": {}, "documents": {}}
         try:
             content = self._path.read_text(encoding="utf-8").strip()
             if not content:
-                payload = {"instructions": {}, "documents": {}}
-                self._payload_cache = self._clone_payload(payload)
-                self._payload_cache_mtime_ns = current_mtime_ns
-                return payload
+                return {"instructions": {}, "documents": {}}
             data = json.loads(content)
             if isinstance(data, dict):
                 if "instructions" in data or "documents" in data:
-                    payload = {
+                    return {
                         "instructions": dict(data.get("instructions", {})),
                         "documents": dict(data.get("documents", {})),
                     }
-                    self._payload_cache = self._clone_payload(payload)
-                    self._payload_cache_mtime_ns = current_mtime_ns
-                    return payload
                 # Backward compatibility with legacy flat doc map.
-                payload = {"instructions": {}, "documents": dict(data)}
-                self._payload_cache = self._clone_payload(payload)
-                self._payload_cache_mtime_ns = current_mtime_ns
-                return payload
+                return {"instructions": {}, "documents": dict(data)}
         except Exception:
-            payload = {"instructions": {}, "documents": {}}
-            self._payload_cache = self._clone_payload(payload)
-            self._payload_cache_mtime_ns = current_mtime_ns
-            return payload
-        payload = {"instructions": {}, "documents": {}}
-        self._payload_cache = self._clone_payload(payload)
-        self._payload_cache_mtime_ns = current_mtime_ns
-        return payload
+            return {"instructions": {}, "documents": {}}
+        return {"instructions": {}, "documents": {}}
 
     def _write_payload(self, payload: dict[str, dict]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -173,18 +150,6 @@ class JsonKnowledgeMetadataStore:
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        self._payload_cache = self._clone_payload(payload)
-        self._payload_cache_mtime_ns = self._path.stat().st_mtime_ns
-
-    @staticmethod
-    def _clone_payload(payload: dict[str, dict]) -> dict[str, dict]:
-        return {
-            "instructions": dict(payload.get("instructions", {})),
-            "documents": {
-                str(item_id): dict(document) if isinstance(document, dict) else document
-                for item_id, document in payload.get("documents", {}).items()
-            },
-        }
 
     @staticmethod
     def _tokenize(text: str) -> set[str]:

@@ -14,10 +14,6 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
-    ollama_temperature: float = 0.1
-    ollama_num_predict: int | None = 192
-    ollama_num_ctx: int | None = 4096
-    ollama_request_timeout_s: float = 20.0
 
     whisper_model_name: str = "small"
     whisper_models_dir: str = ".models/whisper"
@@ -39,7 +35,9 @@ class Settings(BaseSettings):
 
     agent_max_steps_per_turn: int = 4
     agent_max_tool_calls_per_turn: int = 3
-    agent_turn_timeout_ms: int = 8000
+    stt_timeout_ms: int = 20000
+    agent_turn_timeout_ms: int = 20000
+    tts_timeout_ms: int = 20000
     knowledge_collection_name: str = "knowledge_notes"
     knowledge_metadata_path: str = ".data/knowledge/metadata.json"
 

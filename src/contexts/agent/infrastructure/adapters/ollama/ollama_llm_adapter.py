@@ -11,36 +11,19 @@ from src.contexts.agent.application.ports.llm_provider_port import LLMProviderPo
 class OllamaLlmAdapter(LLMProviderPort):
     name = "ollama"
 
-    def __init__(
-        self,
-        base_url: str,
-        model: str,
-        temperature: float = 0.1,
-        num_predict: int | None = 192,
-        num_ctx: int | None = 4096,
-        request_timeout_s: float = 20.0,
-    ) -> None:
+    def __init__(self, base_url: str, model: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
-        self.temperature = temperature
-        self.num_predict = num_predict
-        self.num_ctx = num_ctx
-        self.request_timeout_s = request_timeout_s
-        chat_options: dict[str, object] = {
-            "model": model,
-            "base_url": self.base_url,
-            "temperature": temperature,
-            "reasoning": False,
-            # Prevent proxy env vars from hijacking local/LAN Ollama calls.
-            "async_client_kwargs": {"trust_env": False},
-            "sync_client_kwargs": {"trust_env": False},
-        }
-        if num_predict is not None:
-            chat_options["num_predict"] = num_predict
-        if num_ctx is not None:
-            chat_options["num_ctx"] = num_ctx
         self._chat = (
-            ChatOllama(**chat_options)
+            ChatOllama(
+                model=model,
+                base_url=self.base_url,
+                temperature=0,
+                reasoning=False,
+                # Prevent proxy env vars from hijacking local/LAN Ollama calls.
+                async_client_kwargs={"trust_env": False},
+                sync_client_kwargs={"trust_env": False},
+            )
             if ChatOllama
             else None
         )
@@ -66,21 +49,8 @@ class OllamaLlmAdapter(LLMProviderPort):
             pass
 
         try:
-            options = {}
-            if self.num_predict is not None:
-                options["num_predict"] = self.num_predict
-            if self.num_ctx is not None:
-                options["num_ctx"] = self.num_ctx
-            payload = {
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "temperature": self.temperature,
-                    **options,
-                },
-            }
-            async with httpx.AsyncClient(timeout=self.request_timeout_s, trust_env=False) as client:
+            payload = {"model": self.model, "prompt": prompt, "stream": False}
+            async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
                 response = await client.post(f"{self.base_url}/api/generate", json=payload)
                 response.raise_for_status()
                 body = response.json()

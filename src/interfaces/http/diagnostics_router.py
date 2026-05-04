@@ -22,7 +22,9 @@ def build_diagnostics_router(container: AppContainer) -> APIRouter:
         runtime_budget_ok = (
             container.settings.agent_max_steps_per_turn > 0
             and container.settings.agent_max_tool_calls_per_turn > 0
+            and container.settings.stt_timeout_ms >= 1000
             and container.settings.agent_turn_timeout_ms >= 1000
+            and container.settings.tts_timeout_ms >= 1000
         )
         preflight_ok = metadata_json_valid and metadata_path_writable and runtime_budget_ok
         overall_ok = qdrant_ok and ollama_ok and preflight_ok
@@ -40,7 +42,9 @@ def build_diagnostics_router(container: AppContainer) -> APIRouter:
                 "runtimeBudgetValid": runtime_budget_ok,
                 "agentMaxStepsPerTurn": container.settings.agent_max_steps_per_turn,
                 "agentMaxToolCallsPerTurn": container.settings.agent_max_tool_calls_per_turn,
+                "sttTimeoutMs": container.settings.stt_timeout_ms,
                 "agentTurnTimeoutMs": container.settings.agent_turn_timeout_ms,
+                "ttsTimeoutMs": container.settings.tts_timeout_ms,
             },
             "adapters": {
                 "notification": container.notification_adapter.name,
