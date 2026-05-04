@@ -125,14 +125,12 @@ class OrchestrateTurnUseCase:
             )
 
         try:
-            prompt_context = self._build_prompt_context()
-            user_prompt = (
-                f"{prompt_context}\n\n"
-                "Запрос пользователя:\n"
-                f"{user_text}"
-            )
+            user_prompt = self._build_user_prompt(user_text)
             result = await asyncio.wait_for(
-                self._agent_runner.ainvoke({"messages": [{"role": "user", "content": user_prompt}]}),
+                self._agent_runner.ainvoke(
+                    {"messages": [{"role": "user", "content": user_prompt}]},
+                    config=self._build_agent_config(),
+                ),
                 timeout=self.turn_timeout_ms / 1000,
             )
         except asyncio.TimeoutError:
@@ -166,22 +164,62 @@ class OrchestrateTurnUseCase:
 
     def _build_prompt_context(self) -> str:
         instructions = self.metadata_store.get_instructions()
-        context_lines = ["Ты домашний ассистент. Отвечай кратко и по-русски."]
+        context_lines = [
+            "Базовые правила ответа:",
+            "- Отвечай по-русски.",
+            "- По умолчанию отвечай коротко и по делу.",
+            "- Если пользователь просит формат, стиль или подробность, следуй этому запросу.",
+        ]
         name = instructions.get("name")
         if name:
             context_lines.append(f"Обращайся к пользователю по имени: {name}.")
         tone = instructions.get("tone")
         if tone:
             context_lines.append(f"Стиль ответа: {tone}.")
+        other_instructions = [
+            (key, value)
+            for key, value in sorted(instructions.items())
+            if key not in {"name", "tone"} and str(value).strip()
+        ]
+        if other_instructions:
+            context_lines.append("Постоянные предпочтения пользователя:")
+            for key, value in other_instructions:
+                context_lines.append(f"- {key}: {value}")
         return "\n".join(context_lines)
+
+    def _build_user_prompt(self, user_text: str) -> str:
+        prompt_context = self._build_prompt_context()
+        return (
+            "[Контекст]\n"
+            f"{prompt_context}\n\n"
+            "[Текущий запрос пользователя]\n"
+            f"{user_text}\n\n"
+            "[Требование]\n"
+            "Дай финальный ответ для пользователя. Не возвращай служебные рассуждения."
+        )
+
+    def _build_agent_config(self) -> dict[str, Any]:
+        tool_budget = max(self.max_tool_calls_per_turn, 1)
+        step_budget = max(self.max_steps_per_turn, 1)
+        loop_budget = min(step_budget, tool_budget + 1)
+        return {"recursion_limit": max(3, loop_budget * 2 + 1)}
 
     def _build_agent_runner(self):
         return create_agent(
             model=self.llm_provider.get_chat_model(),
             tools=self._tools,
             system_prompt=(
-                "Ты домашний ассистент, тебя зовут Хуба. Отвечай информативно по-русски. "
-                "Используй инструменты только по необходимости. "
+                "Ты Хуба, домашний голосовой ассистент. "
+                "Всегда отвечай пользователю по-русски. "
+                "Сначала следуй системным ограничениям, затем постоянным предпочтениям пользователя, "
+                "затем текущей инструкции в запросе. "
+                "По умолчанию отвечай коротко, ясно и без воды; если пользователь просит подробнее, дай более полный ответ. "
+                "Не придумывай факты, недоступные функции или результаты действий. "
+                "Если функция не поддерживается, скажи об этом прямо и коротко. "
+                "Используй инструменты только когда без них нельзя получить актуальные данные, найти/изменить память "
+                "или сохранить постоянные инструкции. "
+                "После использования инструментов всегда сформулируй нормальный финальный ответ для пользователя, "
+                "а не сырой вывод инструмента. "
                 "Выбор инструментов: "
                 "weather_tool для фактов о погоде, "
                 "internet_search_tool для общего поиска в интернете по актуальным данным, "

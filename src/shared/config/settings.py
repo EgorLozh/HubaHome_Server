@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
+    ollama_temperature: float = 0.1
+    ollama_num_predict: int | None = 192
+    ollama_num_ctx: int | None = 4096
+    ollama_request_timeout_s: float = 20.0
 
     whisper_model_name: str = "small"
     whisper_models_dir: str = ".models/whisper"

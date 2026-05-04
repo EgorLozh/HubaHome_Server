@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import tempfile
 from pathlib import Path
@@ -27,10 +28,12 @@ class FasterWhisperSpeechToTextAdapter(SpeechToTextPort):
         if not audio_b64:
             return ""
         if self._model is None:
-            self.initialize()
+            await asyncio.to_thread(self.initialize)
         if self._model is None:
             raise RuntimeError("Whisper model failed to initialize")
+        return await asyncio.to_thread(self._transcribe_sync, audio_b64)
 
+    def _transcribe_sync(self, audio_b64: str) -> str:
         audio_bytes = base64.b64decode(audio_b64)
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
             tmp_file.write(audio_bytes)

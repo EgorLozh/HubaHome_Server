@@ -42,7 +42,14 @@ from src.shared.config.settings import Settings
 
 
 def build_container(settings: Settings) -> AppContainer:
-    llm_adapter = OllamaLlmAdapter(base_url=settings.ollama_url, model=settings.ollama_model)
+    llm_adapter = OllamaLlmAdapter(
+        base_url=settings.ollama_url,
+        model=settings.ollama_model,
+        temperature=settings.ollama_temperature,
+        num_predict=settings.ollama_num_predict,
+        num_ctx=settings.ollama_num_ctx,
+        request_timeout_s=settings.ollama_request_timeout_s,
+    )
     web_search_adapter = (
         DuckDuckGoWebSearchAdapter() if settings.enable_real_web_search else StubWebSearchAdapter()
     )

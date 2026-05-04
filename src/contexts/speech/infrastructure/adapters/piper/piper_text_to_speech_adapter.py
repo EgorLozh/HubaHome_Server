@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import wave
@@ -36,10 +37,12 @@ class PiperTextToSpeechAdapter(TextToSpeechPort):
             return ""
 
         if self._voice is None:
-            self.initialize()
+            await asyncio.to_thread(self.initialize)
         if self._voice is None:
             raise RuntimeError("Piper voice failed to initialize")
+        return await asyncio.to_thread(self._synthesize_sync, text)
 
+    def _synthesize_sync(self, text: str) -> str:
         synth_config = SynthesisConfig(speaker_id=self.speaker_id)
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as wav_file:

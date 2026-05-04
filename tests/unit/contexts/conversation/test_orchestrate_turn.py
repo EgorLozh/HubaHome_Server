@@ -61,8 +61,10 @@ class FakeMessage:
 class FakeExecutor:
     def __init__(self, response_factory):
         self._response_factory = response_factory
+        self.last_config: dict[str, Any] | None = None
 
-    async def ainvoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def ainvoke(self, payload: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
+        self.last_config = config
         return self._response_factory(payload)
 
 
@@ -86,6 +88,7 @@ def _build_use_case(response_factory) -> UseCaseForTests:
         knowledge_collection="test_notes",
         metadata_store=metadata_store,
         max_tool_calls_per_turn=3,
+        max_steps_per_turn=4,
     )
 
 
@@ -176,6 +179,34 @@ def test_orchestrate_turn_applies_metadata_instruction_to_prompt():
 
     assert response.intent == "chat"
     assert "Егор" in response.assistant_text
+
+
+def test_orchestrate_turn_includes_all_persistent_instructions_in_prompt():
+    def response_factory(payload: dict[str, Any]) -> dict[str, Any]:
+        messages = payload.get("messages", [])
+        first_content = ""
+        if isinstance(messages, list) and messages:
+            first = messages[0]
+            if isinstance(first, dict):
+                first_content = str(first.get("content", ""))
+        if "- preferred_answer_style: сначала короткий вывод, потом детали" in first_content:
+            return {"messages": [FakeMessage(type="ai", content="Учел постоянные инструкции.", tool_calls=[])]}
+        return {"messages": [FakeMessage(type="ai", content="Инструкции не найдены.", tool_calls=[])]}
+
+    use_case = _build_use_case(response_factory)
+    asyncio.run(use_case._set_instruction_tool("preferred_answer_style", "сначала короткий вывод, потом детали"))
+    response = asyncio.run(use_case.execute("объясни статус сервера"))
+
+    assert response.intent == "chat"
+    assert response.assistant_text == "Учел постоянные инструкции."
+
+
+def test_orchestrate_turn_passes_recursion_limit_to_agent_runner():
+    use_case = _build_use_case(lambda _: {"messages": [FakeMessage(type="ai", content="ok", tool_calls=[])]})
+    response = asyncio.run(use_case.execute("привет"))
+
+    assert response.assistant_text == "ok"
+    assert use_case._fake_executor.last_config == {"recursion_limit": 9}
 
 
 def test_knowledge_document_update_and_delete_via_tools():
