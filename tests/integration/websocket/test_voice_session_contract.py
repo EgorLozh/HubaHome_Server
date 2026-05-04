@@ -54,6 +54,20 @@ def test_ws_accepts_single_utterance_audio_for_server_stt(client):
         assert payload["text"]
 
 
+def test_ws_prefers_server_stt_when_audio_and_client_text_are_both_present(client):
+    with client.websocket_connect("/v1/voice/session?api_key=test-api-key") as websocket:
+        websocket.send_json({"event": "wakeword_detected"})
+        assert websocket.receive_json()["event"] == "assistant_text"
+
+        websocket.send_json({"event": "audio_chunk", "chunkId": 0, "payloadB64": "UklGRg=="})
+        websocket.send_json({"event": "final_transcript", "text": "client stub"})
+
+        payload = websocket.receive_json()
+        assert payload["event"] == "assistant_text"
+        assert payload["text"]
+        assert "stub" not in payload["text"].lower()
+
+
 def test_ws_metadata_and_document_commands_return_assistant_text(client):
     with client.websocket_connect("/v1/voice/session?api_key=test-api-key") as websocket:
         websocket.send_json({"event": "wakeword_detected"})

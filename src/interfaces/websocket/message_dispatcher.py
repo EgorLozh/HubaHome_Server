@@ -20,6 +20,25 @@ class VoiceSessionState:
     audio_chunks_b64: list[str] = field(default_factory=list)
 
 
+async def _resolve_transcript(
+    event_text: str,
+    session: VoiceSessionState,
+    container: AppContainer,
+) -> str:
+    fallback_text = event_text.strip()
+    if not session.audio_chunks_b64:
+        return fallback_text
+
+    try:
+        transcript = await container.speech_to_text_adapter.transcribe(session.audio_chunks_b64[-1])
+    except Exception:
+        ERROR_COUNT.labels(source="stt").inc()
+        return fallback_text
+
+    normalized = transcript.strip()
+    return normalized or fallback_text
+
+
 def parse_event(payload: dict) -> IncomingWsEvent:
     event_type = payload.get("event", "error")
     WS_EVENT_COUNT.labels(event_type=event_type).inc()
@@ -81,15 +100,9 @@ async def stream_event_responses(
             return
 
         started_stt = perf_counter()
-        transcript = event.text.strip()
-        if not transcript and session.audio_chunks_b64:
-            try:
-                transcript = await container.speech_to_text_adapter.transcribe(session.audio_chunks_b64[-1])
-            except Exception:
-                ERROR_COUNT.labels(source="stt").inc()
-                transcript = ""
-            finally:
-                observe_stage_latency(stage="stt", started=started_stt)
+        transcript = await _resolve_transcript(event.text, session=session, container=container)
+        if session.audio_chunks_b64:
+            observe_stage_latency(stage="stt", started=started_stt)
         else:
             observe_stage_latency(stage="stt", started=started_stt)
 
