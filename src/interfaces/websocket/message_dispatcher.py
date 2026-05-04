@@ -1,10 +1,14 @@
 import asyncio
+import base64
+import io
+import wave
 from dataclasses import dataclass, field
 from time import perf_counter
 
 from pydantic import ValidationError
 
 from src.bootstrap.container import AppContainer
+from src.interfaces.voice.turn_runtime import run_voice_turn
 from src.shared.contracts.ws_messages import (
     AssistantAudioChunkEvent,
     AssistantTextEvent,
@@ -17,15 +21,49 @@ from src.shared.observability.metrics import ERROR_COUNT, WS_EVENT_COUNT, observ
 @dataclass
 class VoiceSessionState:
     is_wakeword_detected: bool = False
-    audio_chunks_b64: list[str] = field(default_factory=list)
+    audio_chunks: list["BufferedAudioChunk"] = field(default_factory=list)
 
 
-def _latest_audio_chunk(audio_chunks_b64: list[str]) -> str:
-    for chunk in reversed(audio_chunks_b64):
-        normalized = (chunk or "").strip()
-        if normalized:
-            return normalized
-    return ""
+@dataclass
+class BufferedAudioChunk:
+    chunk_id: int
+    payload_b64: str
+
+
+def _merge_audio_chunks(audio_chunks: list[BufferedAudioChunk]) -> str:
+    ordered_chunks = sorted(
+        (chunk for chunk in audio_chunks if chunk.payload_b64.strip()),
+        key=lambda chunk: chunk.chunk_id,
+    )
+    if not ordered_chunks:
+        return ""
+    if len(ordered_chunks) == 1:
+        return ordered_chunks[0].payload_b64.strip()
+
+    pcm_parts: list[bytes] = []
+    sample_rate = 16_000
+    channels = 1
+    sample_width = 2
+
+    for chunk in ordered_chunks:
+        audio_bytes = base64.b64decode(chunk.payload_b64)
+        with wave.open(io.BytesIO(audio_bytes), "rb") as wav_file:
+            if not pcm_parts:
+                sample_rate = wav_file.getframerate()
+                channels = wav_file.getnchannels()
+                sample_width = wav_file.getsampwidth()
+            pcm_parts.append(wav_file.readframes(wav_file.getnframes()))
+
+    if not pcm_parts:
+        return ""
+
+    merged_buffer = io.BytesIO()
+    with wave.open(merged_buffer, "wb") as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(sample_width)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"".join(pcm_parts))
+    return base64.b64encode(merged_buffer.getvalue()).decode("ascii")
 
 
 def parse_event(payload: dict) -> IncomingWsEvent:
@@ -66,14 +104,19 @@ async def handle_event(
 ) -> list[dict]:
     if event.event == "wakeword_detected":
         session.is_wakeword_detected = True
-        session.audio_chunks_b64.clear()
-        return [{"event": "assistant_text", "text": "Слушаю, говори команду."}]
+        session.audio_chunks.clear()
+        return []
 
     if event.event == "audio_chunk":
         if len(event.payload_b64 or "") > 2_000_000:
             ERROR_COUNT.labels(source="ws_payload_too_large").inc()
             return [{"event": "error", "message": "Audio chunk is too large"}]
-        session.audio_chunks_b64.append(event.payload_b64 or "")
+        session.audio_chunks.append(
+            BufferedAudioChunk(
+                chunk_id=event.chunk_id,
+                payload_b64=event.payload_b64 or "",
+            )
+        )
         return []
 
     if event.event == "partial_transcript":
@@ -87,11 +130,11 @@ async def handle_event(
         started_stt = perf_counter()
         client_transcript = event.text.strip()
         transcript = ""
-        latest_audio_chunk = _latest_audio_chunk(session.audio_chunks_b64)
-        if latest_audio_chunk and container.speech_to_text_adapter.name != "stub_stt":
+        merged_audio_chunk = _merge_audio_chunks(session.audio_chunks)
+        if merged_audio_chunk and container.speech_to_text_adapter.name != "stub_stt":
             try:
                 transcript = await asyncio.wait_for(
-                    container.speech_to_text_adapter.transcribe(latest_audio_chunk),
+                    container.speech_to_text_adapter.transcribe(merged_audio_chunk),
                     timeout=container.settings.stt_timeout_ms / 1000,
                 )
             except asyncio.TimeoutError:
@@ -109,42 +152,20 @@ async def handle_event(
             normalized_transcript = ""
 
         if not normalized_transcript and client_transcript:
-            if latest_audio_chunk:
+            if merged_audio_chunk:
                 ERROR_COUNT.labels(source="stt_text_fallback").inc()
             normalized_transcript = client_transcript
 
         transcript = normalized_transcript
 
-        started_agent = perf_counter()
-        try:
-            turn = await container.orchestrate_turn_use_case.execute(transcript)
-            assistant_text = turn.assistant_text
-        except Exception:
-            ERROR_COUNT.labels(source="agent").inc()
-            assistant_text = "Не удалось обработать запрос. Попробуй еще раз."
-        finally:
-            observe_stage_latency(stage="agent", started=started_agent)
-
-        responses: list[dict] = [{"event": "assistant_text", "text": assistant_text}]
-
-        started_tts = perf_counter()
-        try:
-            audio_b64 = await asyncio.wait_for(
-                container.text_to_speech_adapter.synthesize(assistant_text),
-                timeout=container.settings.tts_timeout_ms / 1000,
+        turn_result = await run_voice_turn(container=container, transcript=transcript)
+        responses: list[dict] = [{"event": "assistant_text", "text": turn_result.assistant_text}]
+        if turn_result.assistant_audio_b64:
+            responses.append(
+                {"event": "assistant_audio_chunk", "chunkId": 0, "payloadB64": turn_result.assistant_audio_b64}
             )
-            if audio_b64:
-                responses.append(
-                    {"event": "assistant_audio_chunk", "chunkId": 0, "payloadB64": audio_b64}
-                )
-        except asyncio.TimeoutError:
-            ERROR_COUNT.labels(source="tts_timeout").inc()
-        except Exception:
-            ERROR_COUNT.labels(source="tts").inc()
-        finally:
-            observe_stage_latency(stage="tts", started=started_tts)
 
-        session.audio_chunks_b64.clear()
+        session.audio_chunks.clear()
         return responses
 
     if event.event == "assistant_text":

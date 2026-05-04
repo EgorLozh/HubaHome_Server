@@ -10,6 +10,7 @@ from src.shared.observability.metrics import ERROR_COUNT
 def build_ws_router(container: AppContainer) -> APIRouter:
     router = APIRouter()
 
+    @router.websocket("/v1/voice/stream")
     @router.websocket("/v1/voice/session")
     async def voice_session(websocket: WebSocket) -> None:
         provided_key = resolve_api_key(websocket)

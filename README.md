@@ -35,9 +35,13 @@ MVP server runtime for the `HubaHome_Server` repository.
 
 - You can optionally create `.env` from `.env.example`.
 - `docker-compose.yml` already has safe defaults, so `.env` is not mandatory for local run.
-- Voice session clients can send a single utterance WAV as one `audio_chunk`, followed by `final_transcript`.
-- If audio is present, the server now prefers server-side STT.
-- `final_transcript.text` is kept as a compatibility fallback for older clients or degraded STT scenarios.
+- Voice contracts:
+  - `WS /v1/voice/stream` for microphone audio streaming.
+  - `POST /v1/voice/text` for ready text turns.
+  - legacy `WS /v1/voice/session` is kept as a compatibility alias.
+- Voice stream clients can send one utterance as a sequence of `audio_chunk` WAV fragments, followed by `final_transcript`.
+- If audio is present, the stream endpoint prefers server-side STT.
+- `final_transcript.text` is kept as a compatibility fallback for older/degraded stream clients.
 - Phase 2 speech toggles:
   - `ENABLE_REAL_STT=true` with local `faster-whisper`.
   - Whisper defaults to model `small` and auto-download on startup.
