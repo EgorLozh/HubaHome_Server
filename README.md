@@ -35,6 +35,14 @@ MVP server runtime for the `HubaHome_Server` repository.
 
 - You can optionally create `.env` from `.env.example`.
 - `docker-compose.yml` already has safe defaults, so `.env` is not mandatory for local run.
+- LLM provider:
+  - Default is local Ollama (`LLM_PROVIDER=ollama`, `OLLAMA_URL`, `OLLAMA_MODEL`).
+  - To use DeepSeek cloud API set:
+    - `LLM_PROVIDER=deepseek`
+    - `DEEPSEEK_API_KEY=sk-...`
+    - optional: `DEEPSEEK_BASE_URL=https://api.deepseek.com`
+    - optional: `DEEPSEEK_MODEL=deepseek-chat`
+  - Verify with `python scripts/llm_smoke_check.py`.
 - Voice contracts:
   - `WS /v1/voice/stream` for microphone audio streaming.
   - `POST /v1/voice/text` for ready text turns.

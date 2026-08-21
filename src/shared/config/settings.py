@@ -12,8 +12,12 @@ class Settings(BaseSettings):
 
     api_key: str = "dev-api-key"
     qdrant_url: str = "http://localhost:6333"
+    llm_provider: str = "ollama"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-chat"
 
     whisper_model_name: str = "small"
     whisper_models_dir: str = ".models/whisper"

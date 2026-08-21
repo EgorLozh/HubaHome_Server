@@ -1,4 +1,8 @@
 from src.bootstrap.container import AppContainer
+from src.contexts.agent.application.ports.llm_provider_port import LLMProviderPort
+from src.contexts.agent.infrastructure.adapters.deepseek.deepseek_llm_adapter import (
+    DeepSeekLlmAdapter,
+)
 from src.contexts.agent.infrastructure.adapters.ollama.ollama_llm_adapter import (
     OllamaLlmAdapter,
 )
@@ -41,8 +45,21 @@ from src.contexts.webintel.infrastructure.adapters.web_search.duckduckgo_web_sea
 from src.shared.config.settings import Settings
 
 
+def _build_llm_adapter(settings: Settings) -> LLMProviderPort:
+    provider = settings.llm_provider.strip().lower()
+    if provider == "deepseek":
+        return DeepSeekLlmAdapter(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
+            model=settings.deepseek_model,
+        )
+    if provider == "ollama":
+        return OllamaLlmAdapter(base_url=settings.ollama_url, model=settings.ollama_model)
+    raise ValueError(f"Unsupported LLM_PROVIDER '{settings.llm_provider}'. Use 'ollama' or 'deepseek'.")
+
+
 def build_container(settings: Settings) -> AppContainer:
-    llm_adapter = OllamaLlmAdapter(base_url=settings.ollama_url, model=settings.ollama_model)
+    llm_adapter = _build_llm_adapter(settings)
     web_search_adapter = (
         DuckDuckGoWebSearchAdapter() if settings.enable_real_web_search else StubWebSearchAdapter()
     )

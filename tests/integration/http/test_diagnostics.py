@@ -5,6 +5,7 @@ def test_diagnostics_endpoint(client):
     assert "checks" in body
     assert "preflight" in body
     assert "qdrant" in body["checks"]
-    assert "ollama" in body["checks"]
+    assert "llm" in body["checks"]
+    assert body["adapters"]["llm"] == "ollama"
     assert "metadataPathWritable" in body["preflight"]
     assert "metadataJsonValid" in body["preflight"]

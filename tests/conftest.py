@@ -11,6 +11,7 @@ def settings(tmp_path) -> Settings:
         app_env="test",
         api_key="test-api-key",
         qdrant_url="http://localhost:6333",
+        llm_provider="ollama",
         ollama_url="http://localhost:11434",
         enable_real_stt=False,
         enable_real_tts=False,

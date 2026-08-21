@@ -11,6 +11,7 @@ dependencies = [
   "langchain>=0.3.0",
   "langchain-core>=0.3.0",
   "langchain-ollama>=0.2.0",
+  "langchain-openai>=0.3.0",
   "orjson>=3.10.0",
   "piper-tts>=1.4.0",
   "prometheus-client>=0.21.0",

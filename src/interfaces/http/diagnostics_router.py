@@ -13,7 +13,7 @@ def build_diagnostics_router(container: AppContainer) -> APIRouter:
     @router.get("/diagnostics")
     async def diagnostics() -> dict[str, object]:
         qdrant_ok = await container.vector_store_adapter.ping()
-        ollama_ok = await container.llm_adapter.ping()
+        llm_ok = await container.llm_adapter.ping()
         whisper_model_status = container.whisper_model_status
         piper_model_status = container.piper_model_status
         metadata_file = Path(container.settings.knowledge_metadata_path)
@@ -27,12 +27,12 @@ def build_diagnostics_router(container: AppContainer) -> APIRouter:
             and container.settings.tts_timeout_ms >= 1000
         )
         preflight_ok = metadata_json_valid and metadata_path_writable and runtime_budget_ok
-        overall_ok = qdrant_ok and ollama_ok and preflight_ok
+        overall_ok = qdrant_ok and llm_ok and preflight_ok
         return {
             "status": "ok" if overall_ok else "degraded",
             "checks": {
                 "qdrant": "up" if qdrant_ok else "down",
-                "ollama": "up" if ollama_ok else "down",
+                "llm": "up" if llm_ok else "down",
                 "whisperModel": whisper_model_status,
                 "piperModel": piper_model_status,
             },
@@ -47,6 +47,7 @@ def build_diagnostics_router(container: AppContainer) -> APIRouter:
                 "ttsTimeoutMs": container.settings.tts_timeout_ms,
             },
             "adapters": {
+                "llm": container.llm_adapter.name,
                 "notification": container.notification_adapter.name,
                 "stt": container.speech_to_text_adapter.name,
                 "tts": container.text_to_speech_adapter.name,
